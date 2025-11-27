@@ -8,20 +8,65 @@ import matplotlib.dates as mdates
 
 
 # === Parameters ===
-ticker_symbol = "amd"
+ticker_symbol = "SPY"
+
+#get ticker symbol name from yf
+ticker_info = yf.Ticker(ticker_symbol)
+ticker_name = ticker_info.info.get('shortName', ticker_symbol)
+
 # Subtract 20 years using relativedelta
 todaysDate = dt.datetime.today()
-date_minus_20_years = todaysDate - relativedelta(years=20)
+date_minus_20_years = todaysDate - relativedelta(years=25)
 start_date = date_minus_20_years
 end_date = dt.datetime.today()
 window_size = 20               # rolling window for std
 sigma_plot_max = 10            # how many sigma bands to draw
-buy_threshold1 = -2            # threshold1 (-2 sigma)
-buy_threshold2 = -3            # threshold2 (-3 sigma)
+
+
+# ==== METHODS ====
+def append_hlev_to_format(orig_format):
+    # returns a function that calls the original formatter and appends HLEV
+    def _fmt(x, y):
+        # call original to get exact original x,y text
+        base = orig_format(x, y)
+
+        # try to find nearest HLEV value for this x (works with date axes)
+        try:
+            x_dt = mdates.num2date(x).replace(tzinfo=None)
+            ix = stock_data.index.get_indexer([x_dt], method='nearest')[0]
+            date = stock_data.index[ix]
+            hlev = stock_data['HLEV_percentage'].iloc[ix]
+
+            # show '---' if NaN so the UI isn't confusing
+            hlev_text = f"{hlev:.4f}" if (pd.notna(hlev) and np.isfinite(hlev)) else "---"
+            return f"{base}   HLEV={hlev_text}"
+        except Exception:
+            # if anything goes wrong, just return the original string
+            return base
+
+    return _fmt
+
+
+
+
+
+
+# ===== SIGMA LINES =====
+
+
+buy_threshold_neg5 = -5            # threshold1 (-2 sigma)
+buy_threshold_neg8 = -8            # threshold2 (-3 sigma)
+buy_threshold_neg9 = -9
+buy_threshold_neg10 = -10
+
+sell_threshold5 = 5
+sell_threshold8 = 8
+sell_threshold9 = 9
+sell_threshold10 = 10
 
 # === Fetch data ===
 stock_data = yf.download(ticker_symbol, start=start_date, end=end_date)
-closePrice_EOD = stock_data['Close']
+closePrice_EOD = stock_data['Close'].iloc[:, 0] if isinstance(stock_data['Close'], pd.DataFrame) else stock_data['Close']
 
 # === Indicator calculations ===
 stock_data['ema200'] = closePrice_EOD.ewm(span=200, adjust=False).mean()
@@ -45,45 +90,149 @@ stock_data['10sigma_avg'] = (stock_data['rolling_std'] * 10).rolling(window=wind
 
 # === Compute HLEV percentage for 1 year intervals ===
 
+# find the highest and lowest close prices in the for every 1 year intervals in stock_data
+
+stock_data['Highest_close_1yr'] = closePrice_EOD.rolling(window=504, min_periods=1).max()
+stock_data['Lowest_close_1yr'] = closePrice_EOD.rolling(window=504, min_periods=1).min()
+
+
+stock_data['HLEV_Origin'] = stock_data['Lowest_close_1yr'] + (stock_data['Highest_close_1yr'] - stock_data['Lowest_close_1yr'])/2
+
+
+
+stock_data['HLEV_percentage'] = (closePrice_EOD - stock_data['Lowest_close_1yr']) / (stock_data['HLEV_Origin'] - stock_data['Lowest_close_1yr'])
+
+
+# === FIX: prevent divide-by-zero issues in HLEV calculation ===
+den = (stock_data['HLEV_Origin'] - stock_data['Lowest_close_1yr'])
+
+# Replace any 0 denominators with NaN so they don't kill the entire series
+den_safe = den.replace(0, np.nan)
+
+# Recompute HLEV percentage using safe denominator (keeps your original formula intact)
+stock_data['HLEV_percentage'] = (closePrice_EOD - stock_data['HLEV_Origin']) / den_safe
+
+# Optional: uncomment to see whether values exist now
+# print(stock_data['HLEV_percentage'].dropna().head())
+
 
 # =======================================================
-# === FIXED CROSSING DETECTION (no false signals) =======
+# === FIXED CROSSING DETECTION (BUYS) =======
 # =======================================================
 
 z = stock_data['z']
 
-crosses_mask1 = (
+crosses_mask_neg5 = (
     #z.shift(1).notna() &
      #z.notna() &
-    (z.shift(1) < buy_threshold1) &
-    (z >= buy_threshold1)
+    (z.shift(1) < buy_threshold_neg5) &
+    (z > buy_threshold_neg5) &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == -1)
 )
-cross_dates1 = stock_data.index[crosses_mask1]
+cross_dates_neg5 = stock_data.index[crosses_mask_neg5]
 
-crosses_mask2 = (
+crosses_mask_neg8 = (
+    #z.shift(1).notna() &
+     #z.notna() &
+    (z.shift(1) < buy_threshold_neg8) &
+    (z > buy_threshold_neg8) &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == -1)
+)
+cross_dates_neg8 = stock_data.index[crosses_mask_neg8]
+
+crosses_mask_neg9 = (
     # z.shift(1).notna() &
     # z.notna() &
-    (z.shift(1) < buy_threshold2) &
-    (z >= buy_threshold2)
+    (z.shift(1) < buy_threshold_neg9) &
+    (z > buy_threshold_neg9) &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == -1)
 )
-cross_dates2 = stock_data.index[crosses_mask2]
+cross_dates_neg9 = stock_data.index[crosses_mask_neg9]
 
-# === 10sigma_avg Rule ===
+crosses_mask_neg10 = (
+    # z.shift(1).notna() &
+    # z.notna() &
+    (z.shift(1) < buy_threshold_neg10) &
+    (z > buy_threshold_neg10) &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == -1)
+)
+cross_dates_neg10 = stock_data.index[crosses_mask_neg10]
+
+
+
+
+
+# =======================================================
+# === FIXED CROSSING DETECTION (SELLS) =======
+# =======================================================
+
+z = stock_data['z']
+
+
+crosses_mask5 = (
+    #z.shift(1).notna() &
+     #z.notna() &
+    (z.shift(1) > sell_threshold5) &
+    (z < sell_threshold5)  &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == 1)
+)
+cross_dates5 = stock_data.index[crosses_mask5]
+
+
+crosses_mask8 = (
+    #z.shift(1).notna() &
+     #z.notna() &
+    (z.shift(1) > sell_threshold8) &
+    (z < sell_threshold8)  &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == 1)
+)
+cross_dates8 = stock_data.index[crosses_mask8]
+
+crosses_mask9 = (
+    # z.shift(1).notna() &
+    # z.notna() &
+    (z.shift(1) < sell_threshold9) &
+    (z >= sell_threshold9) &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == 1)
+)
+cross_dates9 = stock_data.index[crosses_mask9]
+
+crosses_mask10 = (
+    # z.shift(1).notna() &
+    # z.notna() &
+    (z.shift(1) < sell_threshold10) &
+    (z >= sell_threshold10) &
+    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
+    (stock_data['HLEV_percentage'] == 1)
+)
+cross_dates10 = stock_data.index[crosses_mask10]
+
+
+
 
 # === Plotting ===
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
-fig.set_facecolor('black')
+fig.set_facecolor('Gray')
 
-# Top: price + EMA
-ax1.plot(closePrice_EOD, label='Close', linewidth=1)
+# Top: price + EMA and HLEV origin
+ax1.plot(stock_data['HLEV_Origin'], linewidth=1, color='yellow')
+ax1.plot(closePrice_EOD, label='Daily Close Price', linewidth=1)
 ax1.plot(stock_data['ema200'], label='EMA200', linewidth=1)
 ax1.set_ylabel('Price (USD)')
-ax1.set_title(f"{ticker_symbol} Price & EMA (to {end_date.date()})")
+ax1.set_title(f"{ticker_name} ({ticker_symbol}) Price & EMA 25 years ago to present day")
 ax1.grid(True)
 
 # Bottom: angle and sigma bands
+ax2.set_title(f"Turner Bands Indicator and HLEV Signals (from {date_minus_20_years.date()} to {end_date.date()})")
 ax2.plot(stock_data['angle_ema200'], label='angle_ema200', linewidth=1)
-
+ax2.plot(stock_data['10sigma_avg'], color='gray',linewidth=1)
 # Custom sigma colors
 sigma_colors = [
     'rebeccapurple', 'mediumvioletred', 'crimson', 'red', 'orangered',
@@ -106,22 +255,23 @@ for i in range(1, sigma_plot_max + 1):
 # Zero-line origin
 ax2.axhline(0, color='blue', linewidth=1.2, alpha=0.9, label='origin')
 
-# Threshold lines
-ax2.plot(
-    stock_data['rolling_std'] * buy_threshold1,
-    linestyle='--', linewidth=1, alpha=0.9,
-    label=f'{buy_threshold1}σ (threshold)'
-)
-ax2.plot(
-    stock_data['rolling_std'] * buy_threshold2,
-    linestyle='--', linewidth=1, alpha=0.9,
-    label=f'{buy_threshold2}σ (threshold)'
-)
+# # Threshold lines
+# ax2.plot(
+#     stock_data['rolling_std'] * buy_threshold1,
+#     linestyle='--', linewidth=1, alpha=0.9,
+#     label=f'{buy_threshold1}σ (threshold)'
+# )
+# ax2.plot(
+#     stock_data['rolling_std'] * buy_threshold2,
+#     linestyle='--', linewidth=1, alpha=0.9,
+#     label=f'{buy_threshold2}σ (threshold)'
+# )
 
-# === Plot signals for threshold1
-if not cross_dates1.empty:
+
+# === Plot signals for buy_threshold1
+if not cross_dates_neg5.empty:
     first = True
-    for date in cross_dates1:
+    for date in cross_dates_neg5:
         ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
                     label='Buy Signal' if first else None)
         ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
@@ -130,10 +280,11 @@ if not cross_dates1.empty:
         ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
         first = False
 
-# === Plot signals for threshold2
-if not cross_dates2.empty:
+
+# === Plot signals for buy_threshold1
+if not cross_dates_neg8.empty:
     first = True
-    for date in cross_dates2:
+    for date in cross_dates_neg8:
         ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
                     label='Buy Signal' if first else None)
         ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
@@ -141,6 +292,112 @@ if not cross_dates2.empty:
         ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='cyan', zorder=6)
         ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
         first = False
+
+# === Plot signals for buy_threshold2
+if not cross_dates_neg9.empty:
+    first = True
+    for date in cross_dates_neg9:
+        ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
+                    label='Buy Signal' if first else None)
+        ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
+        
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='cyan', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
+        first = False
+
+# === Plot signals for buy_threshold3
+if not cross_dates_neg10.empty:
+    first = True
+    for date in cross_dates_neg10:
+        ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
+                    label='Buy Signal' if first else None)
+        ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
+        
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='cyan', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
+        first = False
+
+
+# === Plot signals for sell_threshold1
+if not cross_dates5.empty:
+    first = True
+    for date in cross_dates5:
+        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
+                    label='Sell Signal' if first else None)
+        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
+        
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
+        first = False
+
+
+# === Plot signals for sell_threshold1
+if not cross_dates8.empty:
+    first = True
+    for date in cross_dates8:
+        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
+                    label='Sell Signal' if first else None)
+        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
+        
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
+        first = False
+
+# === Plot signals for sell_threshold2
+if not cross_dates9.empty:
+    first = True
+    for date in cross_dates9:
+        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
+                    label='Sell Signal' if first else None)
+        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
+        
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
+        first = False
+
+# === Plot signals for sell_threshold3
+if not cross_dates10.empty:
+    first = True
+    for date in cross_dates10:
+        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
+                    label='Sell Signal' if first else None)
+        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
+        
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
+        first = False
+
+# === Preserve the original x,y display and append HLEV_percentage (non-invasive) ===
+# Save original formatters
+orig_ax1_format = ax1.format_coord
+orig_ax2_format = ax2.format_coord
+
+def append_hlev_to_format(orig_format):
+    # returns a function that calls the original formatter and appends HLEV
+    def _fmt(x, y):
+        # call original to get exact original x,y text
+        base = orig_format(x, y)
+
+        # try to find nearest HLEV value for this x (works with date axes)
+        try:
+            x_dt = mdates.num2date(x).replace(tzinfo=None)
+            ix = stock_data.index.get_indexer([x_dt], method='nearest')[0]
+            date = stock_data.index[ix]
+            hlev = stock_data['HLEV_percentage'].iloc[ix]
+
+            # show '---' if NaN so the UI isn't confusing
+            hlev_text = f"{hlev:.4f}" if (pd.notna(hlev) and np.isfinite(hlev)) else "---"
+            return f"{base}   HLEV={hlev_text}"
+        except Exception:
+            # if anything goes wrong, just return the original string
+            return base
+
+    return _fmt
+
+# Apply only to the bottom axis as you requested
+ax1.format_coord = orig_ax1_format     # leave top axis exactly as-is
+ax2.format_coord = append_hlev_to_format(orig_ax2_format)
+
 
 # === Labels, grid, legend ===
 ax1.legend(loc='upper left', fontsize='small')
@@ -165,5 +422,5 @@ ax1.xaxis.set_major_formatter(year_fmt)
 ax1.grid(True, which='major')
 ax2.grid(True, which='major')
 
-plt.tight_layout()
+#plt.tight_layout()
 plt.show()
