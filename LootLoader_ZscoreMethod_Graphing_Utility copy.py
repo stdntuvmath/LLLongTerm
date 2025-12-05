@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 
 
 # === Parameters ===
-ticker_symbol = "SPY"
+ticker_symbol = "AA"
 
 #get ticker symbol name from yf
 ticker_info = yf.Ticker(ticker_symbol)
@@ -112,9 +112,9 @@ den_safe = den.replace(0, np.nan)
 # Recompute HLEV percentage using safe denominator (keeps your original formula intact)
 stock_data['HLEV_percentage'] = (closePrice_EOD - stock_data['HLEV_Origin']) / den_safe
 
-# Optional: uncomment to see whether values exist now
-# print(stock_data['HLEV_percentage'].dropna().head())
-
+# === Smoothing EMA's for the classifier ===
+stock_data['ema30'] = closePrice_EOD.ewm(span=30, adjust=False).mean()
+stock_data['ema90'] = closePrice_EOD.ewm(span=90, adjust=False).mean()
 
 # =======================================================
 # === FIXED CROSSING DETECTION (BUYS) =======
@@ -122,97 +122,51 @@ stock_data['HLEV_percentage'] = (closePrice_EOD - stock_data['HLEV_Origin']) / d
 
 z = stock_data['z']
 
-crosses_mask_neg5 = (
-    #z.shift(1).notna() &
-     #z.notna() &
-    (z.shift(1) < buy_threshold_neg5) &
-    (z > buy_threshold_neg5) &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == -1)
+cross_buy = (
+
+    # ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
+    # (stock_data['ema30'] < stock_data['ema90']) &
+    # (stock_data['ema90'] > stock_data['HLEV_Origin']))
+    
+    ((stock_data['ema30'].shift(1) < stock_data['ema90'].shift(1)) &
+    (stock_data['ema30'] > stock_data['ema90'])) &
+    (stock_data['ema90'] < stock_data['HLEV_Origin'])&
+    (closePrice_EOD < stock_data['HLEV_Origin'])&
+    ((stock_data['HLEV_percentage'] <= -0.4))
+    # |
+    
+    # ((stock_data['angle_ema200'].shift(1) < -10*stock_data['rolling_std'].shift(1)) &
+    # (stock_data['angle_ema200'] > -10*stock_data['rolling_std']))&
+    # ((stock_data['10sigma_avg'] < 10*stock_data['rolling_std']))&
+    # (stock_data['HLEV_percentage'] <= -1)
+    # |    
+    # ((stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])&
+    #  (stock_data['HLEV_percentage'] <= -1))
+
+
 )
-cross_dates_neg5 = stock_data.index[crosses_mask_neg5]
+cross_dates_buy = stock_data.index[cross_buy]
 
-crosses_mask_neg8 = (
-    #z.shift(1).notna() &
-     #z.notna() &
-    (z.shift(1) < buy_threshold_neg8) &
-    (z > buy_threshold_neg8) &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == -1)
+cross_sell = (
+
+    ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
+    (stock_data['ema30'] < stock_data['ema90']) &
+    (stock_data['ema90'] > stock_data['HLEV_Origin']))
+    
+    # ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
+    # (stock_data['ema30'] < stock_data['ema90']) &
+    # (stock_data['HLEV_percentage'] > 0.5))
+    # |
+    # ((stock_data['HLEV_percentage'] >= .9)&
+    #  (stock_data['angle_ema200'].shift(1) > 8*stock_data['rolling_std'].shift(1)) &
+    #  (stock_data['angle_ema200'] < 8*stock_data['rolling_std']))
+    # |
+    # ((stock_data['HLEV_percentage'] >= .9)&
+    #  (stock_data['angle_ema200'].shift(1) > 9*stock_data['rolling_std'].shift(1)) &
+    #  (stock_data['angle_ema200'] < 9*stock_data['rolling_std']))
 )
-cross_dates_neg8 = stock_data.index[crosses_mask_neg8]
+cross_dates_sell = stock_data.index[cross_sell]
 
-crosses_mask_neg9 = (
-    # z.shift(1).notna() &
-    # z.notna() &
-    (z.shift(1) < buy_threshold_neg9) &
-    (z > buy_threshold_neg9) &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == -1)
-)
-cross_dates_neg9 = stock_data.index[crosses_mask_neg9]
-
-crosses_mask_neg10 = (
-    # z.shift(1).notna() &
-    # z.notna() &
-    (z.shift(1) < buy_threshold_neg10) &
-    (z > buy_threshold_neg10) &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == -1)
-)
-cross_dates_neg10 = stock_data.index[crosses_mask_neg10]
-
-
-
-
-
-# =======================================================
-# === FIXED CROSSING DETECTION (SELLS) =======
-# =======================================================
-
-z = stock_data['z']
-
-
-crosses_mask5 = (
-    #z.shift(1).notna() &
-     #z.notna() &
-    (z.shift(1) > sell_threshold5) &
-    (z < sell_threshold5)  &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == 1)
-)
-cross_dates5 = stock_data.index[crosses_mask5]
-
-
-crosses_mask8 = (
-    #z.shift(1).notna() &
-     #z.notna() &
-    (z.shift(1) > sell_threshold8) &
-    (z < sell_threshold8)  &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == 1)
-)
-cross_dates8 = stock_data.index[crosses_mask8]
-
-crosses_mask9 = (
-    # z.shift(1).notna() &
-    # z.notna() &
-    (z.shift(1) < sell_threshold9) &
-    (z >= sell_threshold9) &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == 1)
-)
-cross_dates9 = stock_data.index[crosses_mask9]
-
-crosses_mask10 = (
-    # z.shift(1).notna() &
-    # z.notna() &
-    (z.shift(1) < sell_threshold10) &
-    (z >= sell_threshold10) &
-    (stock_data["10sigma_avg"] < stock_data['rolling_std'] * 10) &
-    (stock_data['HLEV_percentage'] == 1)
-)
-cross_dates10 = stock_data.index[crosses_mask10]
 
 
 
@@ -225,6 +179,8 @@ fig.set_facecolor('Gray')
 ax1.plot(stock_data['HLEV_Origin'], linewidth=1, color='yellow')
 ax1.plot(closePrice_EOD, label='Daily Close Price', linewidth=1)
 ax1.plot(stock_data['ema200'], label='EMA200', linewidth=1)
+ax1.plot(stock_data['ema30'], label='EMA30', linewidth=1, color='white')
+ax1.plot(stock_data['ema90'], label='EMA90', linewidth=1, color='red')
 ax1.set_ylabel('Price (USD)')
 ax1.set_title(f"{ticker_name} ({ticker_symbol}) Price & EMA 25 years ago to present day")
 ax1.grid(True)
@@ -269,9 +225,9 @@ ax2.axhline(0, color='blue', linewidth=1.2, alpha=0.9, label='origin')
 
 
 # === Plot signals for buy_threshold1
-if not cross_dates_neg5.empty:
+if not cross_dates_buy.empty:
     first = True
-    for date in cross_dates_neg5:
+    for date in cross_dates_buy:
         ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
                     label='Buy Signal' if first else None)
         ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
@@ -282,90 +238,17 @@ if not cross_dates_neg5.empty:
 
 
 # === Plot signals for buy_threshold1
-if not cross_dates_neg8.empty:
+if not cross_dates_sell.empty:
     first = True
-    for date in cross_dates_neg8:
-        ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
-                    label='Buy Signal' if first else None)
-        ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
-        
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='cyan', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
-        first = False
-
-# === Plot signals for buy_threshold2
-if not cross_dates_neg9.empty:
-    first = True
-    for date in cross_dates_neg9:
-        ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
-                    label='Buy Signal' if first else None)
-        ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
-        
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='cyan', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
-        first = False
-
-# === Plot signals for buy_threshold3
-if not cross_dates_neg10.empty:
-    first = True
-    for date in cross_dates_neg10:
-        ax2.axvline(x=date, color='cyan', linestyle='--', alpha=0.8, linewidth=1.0,
-                    label='Buy Signal' if first else None)
-        ax1.axvline(x=date, color='cyan', linestyle='--', alpha=0.35, linewidth=1.0)
-        
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='cyan', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='cyan', zorder=6)
-        first = False
-
-
-# === Plot signals for sell_threshold1
-if not cross_dates5.empty:
-    first = True
-    for date in cross_dates5:
-        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
+    for date in cross_dates_sell:
+        ax2.axvline(x=date, color='Magenta', linestyle='--', alpha=0.8, linewidth=1.0,
                     label='Sell Signal' if first else None)
-        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
+        ax1.axvline(x=date, color='Magenta', linestyle='--', alpha=0.35, linewidth=1.0)
         
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
+        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='Magenta', zorder=6)
+        ax1.scatter(date, closePrice_EOD.loc[date], color='Magenta', zorder=6)
         first = False
 
-
-# === Plot signals for sell_threshold1
-if not cross_dates8.empty:
-    first = True
-    for date in cross_dates8:
-        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
-                    label='Sell Signal' if first else None)
-        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
-        
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
-        first = False
-
-# === Plot signals for sell_threshold2
-if not cross_dates9.empty:
-    first = True
-    for date in cross_dates9:
-        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
-                    label='Sell Signal' if first else None)
-        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
-        
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
-        first = False
-
-# === Plot signals for sell_threshold3
-if not cross_dates10.empty:
-    first = True
-    for date in cross_dates10:
-        ax2.axvline(x=date, color='magenta', linestyle='--', alpha=0.8, linewidth=1.0,
-                    label='Sell Signal' if first else None)
-        ax1.axvline(x=date, color='magenta', linestyle='--', alpha=0.35, linewidth=1.0)
-        
-        ax2.scatter(date, stock_data.loc[date, 'angle_ema200'], color='magenta', zorder=6)
-        ax1.scatter(date, closePrice_EOD.loc[date], color='magenta', zorder=6)
-        first = False
 
 # === Preserve the original x,y display and append HLEV_percentage (non-invasive) ===
 # Save original formatters
@@ -409,14 +292,16 @@ ax1.set_facecolor('black')
 ax2.set_facecolor('black')
 
 # === Make x-axis grid show every year ===
-year_locator = mdates.YearLocator()           # one tick/grid per year
-year_fmt = mdates.DateFormatter('%Y')         # show just the year
+ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d-%Y'))
 
-ax2.xaxis.set_major_locator(year_locator)
-ax2.xaxis.set_major_formatter(year_fmt)
+# year_locator = mdates.YearLocator()           # one tick/grid per year
+# year_fmt = mdates.DateFormatter('%Y')         # show just the year
 
-ax1.xaxis.set_major_locator(year_locator)
-ax1.xaxis.set_major_formatter(year_fmt)
+# ax2.xaxis.set_major_locator(year_locator)
+# ax2.xaxis.set_major_formatter(year_fmt)
+
+# ax1.xaxis.set_major_locator(year_locator)
+# ax1.xaxis.set_major_formatter(year_fmt)
 
 # Ensure gridlines are visible
 ax1.grid(True, which='major')
