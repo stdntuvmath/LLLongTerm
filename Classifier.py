@@ -1,114 +1,175 @@
-# Classifier.py (refactored)
-
-import pandas as pd
-import numpy as np
 import yfinance as yf
-import os
-import pickle
-from datetime import datetime
+import numpy as np
+import datetime as dt
 
-# ---------------------------
-# CONFIGURATION
-# ---------------------------
 
-TICKER_FILE = r"C:\Users\stdnt\Desktop\LootLoader\LongTerm\stock_list_all.csv"
-OUTPUT_DIR = r"C:\Users\stdnt\Desktop\LootLoader\LongTerm\classified_data"
-BATCH_SIZE = 100
-RESUME_FILE = r"C:\Users\stdnt\Desktop\LootLoader\LongTerm\resume.pkl"
+# =====================================
+# Normalization of full 25-year curve
+# =====================================
+def normalize_full_curve(prices):
+    prices = np.array(prices)
+    norm = prices - prices[0]
+    denom = norm.max() if norm.max() != 0 else 1
+    return norm / denom
 
-# ---------------------------
-# HELPER FUNCTIONS
-# ---------------------------
 
-def load_tickers(file_path):
-    if not os.path.exists(file_path):
-        print(f"[WARN] Ticker file not found: {file_path}")
-        # Create an empty template if you like:
-        pd.DataFrame({"Ticker": []}).to_csv(file_path, index=False)
+# =====================================
+# Generate basis functions (x, x^2, sin, exp, etc.)
+# =====================================
+def generate_basis_functions(N):
+    x = np.linspace(0, 1, N)
+
+    funcs = {
+        "sin(x)": np.sin(2 * np.pi * x),
+        "e^x": np.exp(x),
+        "e^-x": np.exp(-x),
+        "-e^x": -np.exp(x),
+        "x": x,
+        "-x": -x,
+        "x^2": x**2
+    }
+
+    # Normalize functions same way the price curve is normalized
+    for key in funcs:
+        f = funcs[key]
+        f = f - f[0]
+        denom = f.max() if f.max() != 0 else 1
+        funcs[key] = f / denom
+
+    return funcs
+
+
+# =====================================
+# Compare normalized price curve to each function
+# =====================================
+def compare_to_basis(normalized_curve, basis_funcs):
+    errors = {}
+    for name, f in basis_funcs.items():
+        mse = np.mean((normalized_curve - f)**2)
+        errors[name] = mse
+    return errors
+
+
+# =====================================
+# Rank function matches and attach date range
+# =====================================
+def rank_function_matches_with_dates(errors, start_date, end_date):
+    ranked = sorted(errors.items(), key=lambda x: x[1])
+    return [
+        (name, float(error), f"{start_date} → {end_date}")
+        for name, error in ranked
+    ]
+
+
+# =====================================
+# Rolling Shape Detection (365-day windows)
+# =====================================
+def rolling_shape_detection(prices, dates, window=365):
+    N = len(prices)
+    results = []
+
+    for i in range(N - window):
+        # extract window prices
+        segment = prices[i:i+window]
+
+        # normalize segment
+        seg = segment - segment[0]
+        denom = seg.max() if seg.max() != 0 else 1
+        seg = seg / denom
+
+        # generate basis functions for this window
+        basis = generate_basis_functions(window)
+
+        # compute errors
+        errors = compare_to_basis(seg, basis)
+
+        # pick best-matching shape
+        best_shape = min(errors, key=errors.get)
+        best_error = float(errors[best_shape])
+
+        results.append({
+            "start": dates[i],
+            "end": dates[i+window],
+            "shape": best_shape,
+            "error": best_error,
+        })
+
+    return results
+
+
+# =====================================
+# Consolidate consecutive windows with same shape
+# =====================================
+def consolidate_shape_periods(results):
+    if not results:
         return []
-    df = pd.read_csv(file_path)
-    if 'Ticker' not in df.columns:
-        raise ValueError("Ticker file must contain a column named 'Ticker'")
-    return df['Ticker'].dropna().astype(str).tolist()
 
-def fetch_stock_data(tickers, period="1y", interval="1d"):
-    try:
-        data = yf.download(tickers, period=period, interval=interval, group_by='ticker', threads=True, auto_adjust=True)
-        return data
-    except Exception as e:
-        print(f"[ERROR] Error fetching data: {e}")
-        return pd.DataFrame()
+    consolidated = []
+    current_shape = results[0]["shape"]
+    start_date = results[0]["start"]
+    last_end = results[0]["end"]
 
-def calculate_indicators(df):
-    df = df.copy()
-    df['returns'] = df['Close'].pct_change()
-    df['ma20'] = df['Close'].rolling(20).mean()
-    df['ma50'] = df['Close'].rolling(50).mean()
-    df['std20'] = df['Close'].rolling(20).std()
-    df['momentum'] = df['Close'] - df['ma20']
-    df.fillna(0, inplace=True)
-    return df
+    for r in results[1:]:
+        if r["shape"] == current_shape:
+            last_end = r["end"]
+        else:
+            consolidated.append((current_shape, start_date, last_end))
+            current_shape = r["shape"]
+            start_date = r["start"]
+            last_end = r["end"]
 
-def classify_stock(df):
-    last_row = df.iloc[-1]
-    if last_row['momentum'] > 0:
-        return "Long"
-    elif last_row['momentum'] < 0:
-        return "Short"
-    else:
-        return "Neutral"
+    consolidated.append((current_shape, start_date, last_end))
+    return consolidated
 
-def save_classification(ticker, classification, output_dir):
-    os.makedirs(output_dir, exist_ok=True)
-    file_path = os.path.join(output_dir, f"{ticker}.pkl")
-    with open(file_path, "wb") as f:
-        pickle.dump({
-            'ticker': ticker,
-            'classification': classification,
-            'timestamp': datetime.now()
-        }, f)
 
-# ---------------------------
-# MAIN PROCESS
-# ---------------------------
-
+# =====================================
+# MAIN PROGRAM
+# =====================================
 def main():
-    tickers = load_tickers(TICKER_FILE)
-    print(f"[INFO] Loaded {len(tickers)} tickers from {TICKER_FILE}")
-    start_index = 0
+    ticker = "AAL"  # change to any stock, e.g., "AAPL", "MSFT", etc.
+    print(f"\nDownloading 25-year history for {ticker}...\n")
 
-    if os.path.exists(RESUME_FILE):
-        with open(RESUME_FILE, "rb") as f:
-            start_index = pickle.load(f)
-        print(f"[INFO] Resuming from index {start_index} ({tickers[start_index] if start_index < len(tickers) else 'N/A'})")
+    end_date = dt.datetime.today()
+    start_date = end_date - dt.timedelta(days=365 * 25)
 
-    for i in range(start_index, len(tickers), BATCH_SIZE):
-        batch = tickers[i:i + BATCH_SIZE]
-        print(f"[INFO] Processing batch indices {i} to {i + len(batch) - 1}, {len(batch)} tickers")
-        data = fetch_stock_data(batch)
+    data = yf.download(ticker, start=start_date, end=end_date)
 
-        if data.empty:
-            print(f"[WARN] No data for batch {i}-{i+len(batch)-1}. Skipping.")
-            continue
+    if data.empty:
+        print("Error: No data downloaded.")
+        return
 
-        for ticker in batch:
-            try:
-                if len(batch) > 1:
-                    df = data[ticker].copy()
-                else:
-                    df = data.copy()
-                df_indicators = calculate_indicators(df)
-                classification = classify_stock(df_indicators)
-                save_classification(ticker, classification, OUTPUT_DIR)
-            except Exception as e:
-                print(f"[ERROR] Processing ticker {ticker}: {e}")
-                continue
+    close_prices = data["Close"].values
+    dates = data.index
 
-        # Save progress
-        with open(RESUME_FILE, "wb") as f:
-            pickle.dump(i + BATCH_SIZE, f)
+    # ============================
+    # 1. FULL CURVE SHAPE MATCHING
+    # ============================
+    norm_curve = normalize_full_curve(close_prices)
+    basis = generate_basis_functions(len(close_prices))
+    errors = compare_to_basis(norm_curve, basis)
 
-    print("[INFO] Classification complete!")
+    start_str = dates[0].strftime("%Y-%m-%d")
+    end_str = dates[-1].strftime("%Y-%m-%d")
+    long_term_results = rank_function_matches_with_dates(errors, start_str, end_str)
 
+    print("=== LONG-TERM SHAPE RESEMBLANCE (FULL 25 YEARS) ===\n")
+    for row in long_term_results:
+        print(row)
+
+    # ============================
+    # 2. ROLLING SHAPE DETECTION
+    # ============================
+    print("\n\nRunning rolling shape detection (365-day windows)...\n")
+    rolling = rolling_shape_detection(close_prices, dates, window=365)
+    periods = consolidate_shape_periods(rolling)
+
+    print("=== SHAPE PERIODS OVER TIME ===\n")
+    for shape, start, end in periods:
+        print(f"{start.date()} → {end.date()} : {shape}")
+
+
+# =====================================
+# RUN MAIN
+# =====================================
 if __name__ == "__main__":
     main()

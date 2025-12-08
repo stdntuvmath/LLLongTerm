@@ -5,6 +5,7 @@ import datetime as dt
 import os
 from dateutil.relativedelta import relativedelta
 import traceback
+import pickle
 
 
 import LLLib_Charles_Schwab as cswab
@@ -56,7 +57,7 @@ class LLLib_LongTerm:
                         print("symbol data: "+stock_Data_forSymbol_df)
                         print(traceback.format_exc())
 
-        class Files:
+        class From_Files:
 
             def load_tickers(file_path):
                 if not os.path.exists(file_path):
@@ -69,6 +70,38 @@ class LLLib_LongTerm:
                     raise ValueError("Ticker file must contain a column named 'Ticker'")
                 return df['Ticker'].dropna().astype(str).tolist()
 
+        class From_Pickles:
+
+            def load_from_pickle(filename):
+                """
+                Loads a Python object from a pickle file.
+
+                Returns:
+                    data (any Python object) or None if file does not exist.
+                """
+                if not os.path.exists(filename):
+                    return None  # Or {} if you prefer default empty dicts
+
+                with open(filename, 'rb') as f:
+                    return pickle.load(f)
+
+
+    class Give_Stuff:
+
+        class  To_Pickles:
+            def save_to_pickle(data, filename):
+                """
+                Saves any Python object to a pickle file.
+
+                Parameters:
+                    data: The object to pickle (dict, list, model, thresholds, etc.)
+                    filename: Full path or filename (e.g. 'AAPL_historical.pkl')
+                """
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+                with open(filename, 'wb') as f:
+                    pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 

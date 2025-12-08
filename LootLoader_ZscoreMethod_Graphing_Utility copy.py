@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 
 
 # === Parameters ===
-ticker_symbol = "AA"
+ticker_symbol = "AMD"
 
 #get ticker symbol name from yf
 ticker_info = yf.Ticker(ticker_symbol)
