@@ -189,10 +189,12 @@ def hlev_25yrs(prices):
 def hlev_signal(prices):
     h = hlev_25yrs(prices)
 
-    if h < 0.20:
+    if 0.10 < h and h < 0.20:
         return "BUY", h
     elif h > 0.80:
         return "SELL", h
+    elif h < 0.10:
+        return "HOLD", h
     return "HOLD", h
 
 
@@ -253,42 +255,51 @@ def support_resistance_signal(current_price, support, resistance):
 # MODULE 8 — DECISION ENGINE
 # ============================================================
 
+
+
 def trading_decision(regime, ema_sig, hlev_sig, sr_sig):
+    score = 0
 
-    decisions = []
+    WEIGHTS = {
+    "EMA_BUY": 3,
+    "EMA_SELL": 3,
+    "HLEV_BUY": 3,
+    "HLEV_SELL": 3,
+    "SUPPORT_BUY": 1,
+    "RESIST_SELL": 1
+    }
 
-    # EMA-based signals
+    # EMA200 ANGLE
     if ema_sig == "BUY":
-        decisions.append("BUY")
-    if ema_sig == "SELL":
-        decisions.append("SELL")
+        score += WEIGHTS["EMA_BUY"]
+    elif ema_sig == "SELL":
+        score -= WEIGHTS["EMA_SELL"]
 
-    # HLEV signals
+    # HLEV 25-YEAR
     if hlev_sig == "BUY":
-        decisions.append("BUY")
-    if hlev_sig == "SELL":
-        decisions.append("SELL")
+        score += WEIGHTS["HLEV_BUY"]
+    elif hlev_sig == "SELL":
+        score -= WEIGHTS["HLEV_SELL"]
 
-    # Support/Resistance positional signals
+    # SUPPORT / RESISTANCE
     if sr_sig == "NEAR_SUPPORT" and regime in ["Stabilization", "Growth", "Recovery"]:
-        decisions.append("BUY")
-    if sr_sig == "NEAR_RESISTANCE" and regime in ["Acceleration", "Crash"]:
-        decisions.append("SELL")
+        score += WEIGHTS["SUPPORT_BUY"]
+    elif sr_sig == "NEAR_RESISTANCE" and regime in ["Acceleration", "Crash"]:
+        score -= WEIGHTS["RESIST_SELL"]
 
-    # Final consolidated decision
-    if "BUY" in decisions:
+    # Final decision
+    if score > 0:
         return "BUY"
-    elif "SELL" in decisions:
+    elif score < 0:
         return "SELL"
     return "HOLD"
-
 
 # ============================================================
 # MAIN PIPELINE
 # ============================================================
 
 def main():
-    ticker = "AMD"
+    ticker = "AMWL"
 
     end = dt.datetime.today()
     start = end - dt.timedelta(days=365 * 25)
@@ -318,6 +329,7 @@ def main():
     sr_sig, dist_s, dist_r = support_resistance_signal(prices[-1], support, resistance)
 
     # 6. FINAL DECISION
+
     final = trading_decision(regime_name, ema_sig, hlev_sig, sr_sig)
 
     # 7. TXT OUTPUT

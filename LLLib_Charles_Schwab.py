@@ -4709,6 +4709,69 @@ class Trading_Management:
             Logging.error(error)
          
 
+    def Buy_at_MarketValue(symbol, buyPrice):
+
+        tday = datetime.datetime.today()
+        todaysDate = str(tday.date())
+        now = tday.time()
+
+        endTime = now.replace(hour=15, minute=59, second=0)
+        startTime = now.replace(hour=9, minute=29, second=0)
+
+
+        accountBalance = Account_Management.Get_Account_Balance_Available_For_Trading()
+        #put accountBalance into the LLDB
+        numberOfShares = Calculation_Management.Calculate_Share_Amount(buyPrice, accountBalance)
+        riskAmount = buyPrice * numberOfShares
+
+
+
+
+        if(((accountBalance - riskAmount) > 100.00) and (startTime < now and now < endTime)):
+
+            #send buy signal to charles schwab (still need to put STOP value in here)
+            #------------------------------------------------------------------------------------------------            
+            accountHash = Account_Management.Get_Account_Hash()
+            auth = Authentication_Management.Schwab_Wrapper_Authentication.Get_Schwab_Account_Authorization()
+            order = schwab.orders.equities.equity_buy_market(symbol, numberOfShares).set_duration(Duration.GOOD_TILL_CANCEL)
+            r = auth.place_order(accountHash, order)
+            tradeID = schwab.utils.Utils(auth, accountHash).extract_order_id(r)
+            #------------------------------------------------------------------------------------------------                       
+
+            #put the trades data into the trades database
+            #------------------------------------------------------------------------------------------------                        
+            localDate = "1900-01-01"
+            time = str(time).replace("1900-01-01 ","") 
+            localTime = time                        
+            lookingForBuy = 1
+            alreadyBought = 1
+            lookingForSell = 1
+            alreadySold = 0
+            orderType = "MBUY"                                                              
+            Profit_or_Loss = 0.00
+            roi = 0.00
+            Good_Bad_Trade = "NA"
+            orderID = tradeID
+                                    
+            lastTradingRow = Database_Management.Get_Data_From_LootLoaderDataBase.Trading.Get_Last_Row_of_Trading_Tables(symbol)
+            if(str(lastTradingRow) == "None"):
+                rowID = 1
+            else:
+                rowID = int(Database_Management.Get_Data_From_LootLoaderDataBase.Trading.Get_Last_Row_of_Trading_Tables(symbol)[19])+1
+
+            buyPrice = Pull_From_Schwab_Management.Get_BuyPrice_from_orderID(orderID)
+            riskAmount = buyPrice * numberOfShares 
+            incomeTaxesDue = 0
+            sellPrice = 0
+            Database_Management.Give_Data_To_LootLoaderDataBase.Give_TradeData_To_DB(symbol, localDate, localTime, accountBalance, 
+                                                                                    lookingForBuy, alreadyBought, lookingForSell, 
+                                                                                    alreadySold, orderType, buyPrice, numberOfShares, 
+                                                                                    riskAmount, Profit_or_Loss, roi, incomeTaxesDue, buyPrice, sellPrice,Good_Bad_Trade, 
+                                                                                    orderID, rowID)
+            #------------------------------------------------------------------------------------------------                
+
+
+
     def Attempt_Buy_at_MarketValue(symbol):
 
         try:
