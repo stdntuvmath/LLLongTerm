@@ -1,175 +1,205 @@
-import yfinance as yf
 import numpy as np
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import ruptures as rpt
+import yfinance as yf
 import datetime as dt
 
 
-# =====================================
-# Normalization of full 25-year curve
-# =====================================
-def normalize_full_curve(prices):
-    prices = np.array(prices)
-    norm = prices - prices[0]
-    denom = norm.max() if norm.max() != 0 else 1
-    return norm / denom
+# ============================================================
+# RUN CLASSIFIER FOR A STOCK
+# ============================================================
 
-
-# =====================================
-# Generate basis functions (x, x^2, sin, exp, etc.)
-# =====================================
-def generate_basis_functions(N):
-    x = np.linspace(0, 1, N)
-
-    funcs = {
-        "sin(x)": np.sin(2 * np.pi * x),
-        "e^x": np.exp(x),
-        "e^-x": np.exp(-x),
-        "-e^x": -np.exp(x),
-        "x": x,
-        "-x": -x,
-        "x^2": x**2
-    }
-
-    # Normalize functions same way the price curve is normalized
-    for key in funcs:
-        f = funcs[key]
-        f = f - f[0]
-        denom = f.max() if f.max() != 0 else 1
-        funcs[key] = f / denom
-
-    return funcs
-
-
-# =====================================
-# Compare normalized price curve to each function
-# =====================================
-def compare_to_basis(normalized_curve, basis_funcs):
-    errors = {}
-    for name, f in basis_funcs.items():
-        mse = np.mean((normalized_curve - f)**2)
-        errors[name] = mse
-    return errors
-
-
-# =====================================
-# Rank function matches and attach date range
-# =====================================
-def rank_function_matches_with_dates(errors, start_date, end_date):
-    ranked = sorted(errors.items(), key=lambda x: x[1])
-    return [
-        (name, float(error), f"{start_date} → {end_date}")
-        for name, error in ranked
-    ]
-
-
-# =====================================
-# Rolling Shape Detection (365-day windows)
-# =====================================
-def rolling_shape_detection(prices, dates, window=365):
-    N = len(prices)
-    results = []
-
-    for i in range(N - window):
-        # extract window prices
-        segment = prices[i:i+window]
-
-        # normalize segment
-        seg = segment - segment[0]
-        denom = seg.max() if seg.max() != 0 else 1
-        seg = seg / denom
-
-        # generate basis functions for this window
-        basis = generate_basis_functions(window)
-
-        # compute errors
-        errors = compare_to_basis(seg, basis)
-
-        # pick best-matching shape
-        best_shape = min(errors, key=errors.get)
-        best_error = float(errors[best_shape])
-
-        results.append({
-            "start": dates[i],
-            "end": dates[i+window],
-            "shape": best_shape,
-            "error": best_error,
-        })
-
-    return results
-
-
-# =====================================
-# Consolidate consecutive windows with same shape
-# =====================================
-def consolidate_shape_periods(results):
-    if not results:
-        return []
-
-    consolidated = []
-    current_shape = results[0]["shape"]
-    start_date = results[0]["start"]
-    last_end = results[0]["end"]
-
-    for r in results[1:]:
-        if r["shape"] == current_shape:
-            last_end = r["end"]
-        else:
-            consolidated.append((current_shape, start_date, last_end))
-            current_shape = r["shape"]
-            start_date = r["start"]
-            last_end = r["end"]
-
-    consolidated.append((current_shape, start_date, last_end))
-    return consolidated
-
-
-# =====================================
-# MAIN PROGRAM
-# =====================================
-def main():
-    ticker = "AAL"  # change to any stock, e.g., "AAPL", "MSFT", etc.
-    print(f"\nDownloading 25-year history for {ticker}...\n")
-
+def run_classifier(ticker):
     end_date = dt.datetime.today()
-    start_date = end_date - dt.timedelta(days=365 * 25)
+    start_date = end_date - dt.timedelta(days=365 * 5)
 
-    data = yf.download(ticker, start=start_date, end=end_date)
+    df = yf.download(
+        ticker,
+        start=start_date,
+        end=end_date,
+        progress=False
+    )
 
-    if data.empty:
-        print("Error: No data downloaded.")
+    if df.empty:
+        print(f"No data returned for {ticker}")
         return
 
-    close_prices = data["Close"].values
-    dates = data.index
+    results = classify_waveforms(df)
 
-    # ============================
-    # 1. FULL CURVE SHAPE MATCHING
-    # ============================
-    norm_curve = normalize_full_curve(close_prices)
-    basis = generate_basis_functions(len(close_prices))
-    errors = compare_to_basis(norm_curve, basis)
+    print(f"\nWaveform classification for {ticker}:\n")
 
-    start_str = dates[0].strftime("%Y-%m-%d")
-    end_str = dates[-1].strftime("%Y-%m-%d")
-    long_term_results = rank_function_matches_with_dates(errors, start_str, end_str)
-
-    print("=== LONG-TERM SHAPE RESEMBLANCE (FULL 25 YEARS) ===\n")
-    for row in long_term_results:
-        print(row)
-
-    # ============================
-    # 2. ROLLING SHAPE DETECTION
-    # ============================
-    print("\n\nRunning rolling shape detection (365-day windows)...\n")
-    rolling = rolling_shape_detection(close_prices, dates, window=365)
-    periods = consolidate_shape_periods(rolling)
-
-    print("=== SHAPE PERIODS OVER TIME ===\n")
-    for shape, start, end in periods:
-        print(f"{start.date()} → {end.date()} : {shape}")
+    for r in results:
+        print(
+            f"{r['start_date'].date()} → {r['end_date'].date()} "
+            f"| cluster={r['waveform_cluster']}"
+        )
 
 
-# =====================================
-# RUN MAIN
-# =====================================
-if __name__ == "__main__":
-    main()
+
+# ============================================================
+# CONFIG
+# ============================================================
+
+N_CLUSTERS = 4          # number of waveform types to discover
+MIN_SEGMENT_LENGTH = 60  # days
+WINDOW_YEARS = 5
+
+
+# ============================================================
+# STEP 1 — LOAD PRICE DATA (expects Date index)
+# ============================================================
+
+def load_price_series(df):
+    """
+    df must contain:
+    - index: datetime
+    - column: 'Close'
+    """
+    return df['Close'].dropna()
+
+
+# ============================================================
+# STEP 2 — CHANGE POINT SEGMENTATION
+# ============================================================
+
+def segment_waveform(price_series):
+    """
+    Uses raw price only to find structural changes.
+    """
+    signal = price_series.values.reshape(-1, 1)
+
+    algo = rpt.Pelt(model="rbf").fit(signal)
+    breakpoints = algo.predict(pen=10)
+
+    segments = []
+    start = 0
+
+    for bp in breakpoints:
+        if bp - start >= MIN_SEGMENT_LENGTH:
+            segments.append((start, bp))
+        start = bp
+
+    return segments
+
+
+# ============================================================
+# STEP 3 — FEATURE EXTRACTION (ALL COMMENTED BY DESIGN)
+# ============================================================
+
+def extract_features(price_series, segments):
+    feature_rows = []
+
+    for start, end in segments:
+        model = KMeans(n_clusters=N_CLUSTERS, random_state=42)
+        labels = model.fit_predict(X)    
+        segment = price_series.iloc[start:end]
+
+        # -------------------------------
+        # Normalized price
+        # Scaled to [0, 1] or z-scored
+        # -------------------------------
+        # norm_price = (segment - segment.min()) / (segment.max() - segment.min())
+
+        # -------------------------------
+        # First derivative (slope)
+        # Captures trend direction & strength
+        # -------------------------------
+        # slope = np.gradient(norm_price).mean()
+
+        # -------------------------------
+        # Second derivative (curvature)
+        # Captures acceleration / deceleration
+        # -------------------------------
+        # curvature = np.gradient(np.gradient(norm_price)).mean()
+
+        # -------------------------------
+        # Volatility proxy
+        # Rolling std or log-return variance
+        # -------------------------------
+        # returns = np.log(segment / segment.shift(1)).dropna()
+        # volatility = returns.std()
+
+        # -------------------------------
+        # Normalized price
+        # Scaled to [0, 1]
+        # -------------------------------
+        norm_price = (segment - segment.min()) / (segment.max() - segment.min())
+
+        # Directional shape descriptors
+        start_end_delta = float((norm_price.iloc[-1] - norm_price.iloc[0]).iloc[0])
+        mean_level = float(norm_price.mean().iloc[0])
+        price_range = float((norm_price.max() - norm_price.min()).iloc[0])
+
+        features = [
+            start_end_delta,   # overall direction
+            mean_level,        # where price lives in its range
+            price_range        # structure amplitude
+        ]
+
+        feature_rows.append(features)
+
+        return np.array(feature_rows)
+
+
+# ============================================================
+# STEP 4 — CLUSTER SEGMENTS BY SHAPE
+# ============================================================
+
+def cluster_segments(feature_matrix):
+    scaler = StandardScaler()
+    X = scaler.fit_transform(feature_matrix)
+
+    n_samples = X.shape[0]
+    n_clusters = min(N_CLUSTERS, n_samples)
+
+    if n_clusters < 2:
+        return np.zeros(n_samples, dtype=int)
+
+
+
+
+        return labels
+
+
+# ============================================================
+# STEP 5 — HUMAN-READABLE OUTPUT
+# ============================================================
+
+def build_output(price_series, segments, labels):
+    output = []
+
+    for (start, end), label in zip(segments, labels):
+        output.append({
+            "start_date": price_series.index[start],
+            "end_date": price_series.index[end - 1],
+            "waveform_cluster": int(label)
+        })
+
+    return output
+
+
+# ============================================================
+# MAIN PIPELINE
+# ============================================================
+
+def classify_waveforms(df):
+    price = load_price_series(df)
+    segments = segment_waveform(price)
+    features = extract_features(price, segments)
+    labels = cluster_segments(features)
+    return build_output(price, segments, labels)
+
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
+run_classifier("AMD")
+
+
+
+
+

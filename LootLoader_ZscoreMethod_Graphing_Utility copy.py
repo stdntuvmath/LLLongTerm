@@ -9,7 +9,10 @@ import LLLib_Charles_Schwab as lib
 
 
 # === Parameters ===
-ticker_symbol = "CAT"
+ticker_symbol = "ALK"
+
+# Initial account value (snapshot once)
+accountBalance = 25000
 
 #get ticker symbol name from yf
 ticker_info = yf.Ticker(ticker_symbol)
@@ -75,18 +78,7 @@ def Calculate_Share_Amount(
     return max(shares, 1)
 
 
-# ===== SIGMA LINES =====
 
-
-buy_threshold_neg5 = -5            # threshold1 (-2 sigma)
-buy_threshold_neg8 = -8            # threshold2 (-3 sigma)
-buy_threshold_neg9 = -9
-buy_threshold_neg10 = -10
-
-sell_threshold5 = 5
-sell_threshold8 = 8
-sell_threshold9 = 9
-sell_threshold10 = 10
 
 # === Fetch data ===
 stock_data = yf.download(ticker_symbol, start=start_date, end=end_date)
@@ -177,18 +169,18 @@ z = stock_data['z']
 cross_buy = ( 
 
 
-    (stock_data['ema200'] < stock_data['HLEV_Origin']) &
-    (stock_data['ema90'] < stock_data['HLEV_Origin']) &
-    (stock_data['ema30'] < stock_data['ema90']) &
-    (closePrice_EOD.shift(1) < stock_data['ema30'].shift(1)) &
-    (closePrice_EOD > stock_data['ema30'])
+    # (stock_data['ema200'] < stock_data['HLEV_Origin']) &
+    # (stock_data['ema90'] < stock_data['HLEV_Origin']) &
+    # (stock_data['ema30'] < stock_data['ema90']) &
+    # (closePrice_EOD.shift(1) < stock_data['ema30'].shift(1)) &
+    # (closePrice_EOD > stock_data['ema30'])
 
 
-    |
+    # |
 
     (stock_data['angle_ema200'].shift(1) < -2*stock_data['rolling_std'].shift(1)) &
-    (stock_data['angle_ema200'] > -2*stock_data['rolling_std']) &
-    (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])
+    (stock_data['angle_ema200'] > -2*stock_data['rolling_std']) #&
+    # (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])
 
     # |
 
@@ -223,17 +215,19 @@ cross_dates_buy = stock_data.index[cross_buy]
 cross_sell = (
 
 
-    (stock_data['ema200'] > stock_data['HLEV_Origin']) &
-    (stock_data['ema90'] > stock_data['HLEV_Origin']) &
-    (stock_data['ema30'] > stock_data['ema90']) &
-    (closePrice_EOD.shift(1) > stock_data['ema30'].shift(1)) &
-    (closePrice_EOD < stock_data['ema30'])
+    # (stock_data['ema200'] > stock_data['HLEV_Origin']) &
+    # (stock_data['ema90'] > stock_data['HLEV_Origin']) &
+    # (stock_data['ema30'] > stock_data['ema90']) &
+    # (closePrice_EOD.shift(1) > stock_data['ema30'].shift(1)) &
+    # (closePrice_EOD < stock_data['ema30'])
 
-    |
+    # |
 
     (stock_data['angle_ema200'].shift(1) > 10*stock_data['rolling_std'].shift(1)) &
     (stock_data['angle_ema200'] < 10*stock_data['rolling_std']) &
-    (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])
+    (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])&
+    (stock_data['HLEV_percentage'] >= 0.7) &
+    (stock_data['ATR_pct'] >= 0.03)
 
 
     # ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
@@ -298,7 +292,7 @@ cross_dates_sell = pd.Index(filtered_sell_dates)
 # =======================================================
 
 # Initial account value (snapshot once)
-accountBalance = 25000
+accountBalance = accountBalance
 #accountBalance = lib.Account_Management.Get_Account_Balance_Available_For_Trading()
 startingBalance = accountBalance
 
@@ -316,7 +310,7 @@ for i in range(num_trades):
     buy_price = closePrice_EOD.loc[buy_date]
     sell_price = closePrice_EOD.loc[sell_date]
 
-    atr_value = float(stock_data.loc[buy_date, 'ATR_20'])
+    atr_value = stock_data.loc[buy_date, 'ATR_20'].iloc[0]
 
     shares = Calculate_Share_Amount(
         buy_price,
@@ -338,6 +332,41 @@ for i in range(num_trades):
         f"sold: {sell_date.date()} @ {sell_price:.2f}, "
         f"account={accountBalance:.2f}"
     )
+
+# =======================================================
+# === FORCE CLOSE OPEN TRADE AT END OF DATA (IF ANY) ===
+# =======================================================
+
+if len(cross_dates_buy) > len(cross_dates_sell):
+
+    buy_date = cross_dates_buy[-1]
+    sell_date = stock_data.index[-1]   # most recent trading day
+
+    buy_price = closePrice_EOD.loc[buy_date]
+    sell_price = closePrice_EOD.iloc[-1]
+
+    atr_value = stock_data.loc[buy_date, 'ATR_20'].iloc[0]
+
+    shares = Calculate_Share_Amount(
+        buy_price,
+        accountBalance,
+        atr_value
+    )
+
+    trade_profit = (sell_price - buy_price) * shares
+
+    total_profit += trade_profit
+    accountBalance += trade_profit
+
+    print(
+        f"trade{num_trades+1}: "
+        f"P/L={trade_profit:.2f}, "
+        f"shares={shares}, "
+        f"bought: {buy_date.date()} @ {buy_price:.2f}, "
+        f"still in the trade at: {sell_date.date()} @ {sell_price:.2f}, "
+        f"account={accountBalance:.2f}"
+    )
+
 
 print("\n===================================")
 print(f"STARTING BALANCE : {startingBalance:.2f}")
@@ -493,6 +522,8 @@ ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d-%Y'))
 # Ensure gridlines are visible
 ax1.grid(True, which='major')
 ax2.grid(True, which='major')
+
+#input("Press ENTER to exit.")
 
 #plt.tight_layout()
 plt.show()
