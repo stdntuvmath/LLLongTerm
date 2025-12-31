@@ -14,6 +14,9 @@ This tool is intended for **analysis and experimentation**, not live trading or 
 ![LLLongTerm Example Output](images/ALK.JPG)
 ![LLLongTerm Example Output](images/ALK_Stats.JPG)
 
+![LLLongTerm Example Output](images/AMD.JPG)
+![LLLongTerm Example Output](images/AMD_Stats.JPG)
+
 ---
 
 ## What This Project Does

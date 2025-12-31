@@ -9,7 +9,7 @@ import LLLib_Charles_Schwab as lib
 
 
 # === Parameters ===
-ticker_symbol = "ALK"
+ticker_symbol = "AMD"
 
 # Initial account value (snapshot once)
 accountBalance = 25000
