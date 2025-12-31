@@ -11,6 +11,8 @@ The project focuses on:
 
 This tool is intended for **analysis and experimentation**, not live trading or execution.
 
+![LLLongTerm Example Output](images/ALK.JPG)
+
 ---
 
 ## What This Project Does
