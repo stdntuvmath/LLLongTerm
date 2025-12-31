@@ -8,6 +8,56 @@ import matplotlib.dates as mdates
 import LLLib_Charles_Schwab as lib
 
 
+"""
+LLLongTerm — Long-Horizon Market Structure Analysis
+
+LLLongTerm is a research and analysis module designed to study
+long-term market behavior using approximately 20–25 years of
+historical price data.
+
+Purpose:
+- Identify long-horizon trend structure and equilibrium behavior
+- Quantify trend strength and exhaustion using EMA-based slope analysis
+- Measure volatility-normalized overextension via rolling statistics
+- Compute High–Low Equilibrium Value (HLEV) regions for structural context
+
+What this module DOES:
+- Pulls long-duration historical market data
+- Computes long-term indicators (EMA200, EMA angle, volatility bands)
+- Derives equilibrium reference levels (HLEV)
+- Produces visual and printable analytical output
+- Supports research, validation, and signal discovery
+
+What this module DOES NOT do:
+- Execute trades
+- Manage capital
+- Perform live decision-making
+- Interface with broker execution endpoints
+
+Design Notes:
+- This module is intentionally research-only
+- Outputs are descriptive, not prescriptive
+- Results are meant to inform higher-level systems (e.g., LootLoader)
+  rather than act autonomously
+
+Authentication Notice (see also OAuth2 Dependency note):
+- Any broker data access relies on OAuth2 authentication
+- Token handling and refresh logic are intentionally external
+- No credentials or authentication flows exist in this module
+
+LLLongTerm is intended for experimentation, visualization, and
+long-horizon signal research — not live trading.
+"""
+# -----------------------------------------------------------------------------
+# NOTE: OAuth2 Dependency
+# -----------------------------------------------------------------------------
+# All Schwab API calls below assume an active OAuth2 session.
+# If the access token is expired or invalid, the Schwab API will
+# raise an authentication error which is handled in the exception
+# block (manual re-authentication flow).
+
+
+
 # === Parameters ===
 ticker_symbol = "AMD"
 
