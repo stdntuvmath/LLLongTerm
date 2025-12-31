@@ -12,14 +12,14 @@ import LLLib_Charles_Schwab as lib
 LLLongTerm — Long-Horizon Market Structure Analysis
 
 LLLongTerm is a research and analysis module designed to study
-long-term market behavior using approximately 20–25 years of
+long-term market behavior using approximately 25 years of
 historical price data.
 
 Purpose:
 - Identify long-horizon trend structure and equilibrium behavior
 - Quantify trend strength and exhaustion using EMA-based slope analysis
 - Measure volatility-normalized overextension via rolling statistics
-- Compute High–Low Equilibrium Value (HLEV) regions for structural context
+- Compute High-Low Equilibrium Value (HLEV) regions for structural context
 
 What this module DOES:
 - Pulls long-duration historical market data
