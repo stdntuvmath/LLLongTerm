@@ -104,6 +104,23 @@ These visualizations are intended to support **research and interpretation**, no
 
 ## How to Run
 
+# =============================================================================
+# AUTHENTICATION NOTICE (OAuth2)
+# =============================================================================
+# This program relies on OAuth2 authentication with Charles Schwab.
+#
+# OAuth2 token acquisition, refresh, and storage are intentionally
+# handled outside of this script.
+#
+# This script assumes:
+# - A valid OAuth2 access token already exists
+# - Token refresh is managed by external tooling or services
+# - No credentials, secrets, or auth flows are embedded here
+#
+# Any authentication failures are surfaced via API errors and
+# handled through recovery or manual re-authentication scripts.
+
+
 You will have to place code for your strategy to get this to work. The strategy presented in the example pictures has been removed because it is proprietary.
 
 ```bash
