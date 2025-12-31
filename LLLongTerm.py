@@ -120,9 +120,6 @@ stock_data['Lowest_close_1yr'] = closePrice_EOD.rolling(window=504, min_periods=
 stock_data['HLEV_Origin'] = stock_data['Lowest_close_1yr'] + (stock_data['Highest_close_1yr'] - stock_data['Lowest_close_1yr'])/2
 
 
-# HLEV_percentage with ClosePrice and HLEV_Origin
-#stock_data['HLEV_percentage'] = (closePrice_EOD - stock_data['Lowest_close_1yr']) / (stock_data['HLEV_Origin'] - stock_data['Lowest_close_1yr'])
-
 # HLEV_percentage with EMA30 and HLEV_Origin
 stock_data['HLEV_percentage'] = stock_data['ema30'] - stock_data['HLEV_Origin']
 
@@ -169,44 +166,8 @@ z = stock_data['z']
 cross_buy = ( 
 
 
-    # (stock_data['ema200'] < stock_data['HLEV_Origin']) &
-    # (stock_data['ema90'] < stock_data['HLEV_Origin']) &
-    # (stock_data['ema30'] < stock_data['ema90']) &
-    # (closePrice_EOD.shift(1) < stock_data['ema30'].shift(1)) &
-    # (closePrice_EOD > stock_data['ema30'])
-
-
-    # |
-
     (stock_data['angle_ema200'].shift(1) < -2*stock_data['rolling_std'].shift(1)) &
-    (stock_data['angle_ema200'] > -2*stock_data['rolling_std']) #&
-    # (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])
-
-    # |
-
-    # (stock_data['angle_ema200'].shift(1) < -2*stock_data['rolling_std'].shift(1)) &
-    # (stock_data['angle_ema200'] > -2*stock_data['rolling_std']) &
-    # (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])
-
-
-    # ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
-    # (stock_data['ema30'] < stock_data['ema90']) &
-    # (stock_data['ema90'] > stock_data['HLEV_Origin']))
-    
-    # ((stock_data['ema30'].shift(1) < stock_data['ema90'].shift(1)) &
-    # (stock_data['ema30'] > stock_data['ema90'])) &
-    # (stock_data['ema90'] < stock_data['HLEV_Origin'])&
-    # (closePrice_EOD < stock_data['HLEV_Origin'])&
-    # ((stock_data['HLEV_percentage'] <= -0.4))
-    # |
-    
-    # ((stock_data['angle_ema200'].shift(1) < -10*stock_data['rolling_std'].shift(1)) &
-    # (stock_data['angle_ema200'] > -10*stock_data['rolling_std']))&
-    # ((stock_data['10sigma_avg'] < 10*stock_data['rolling_std']))&
-    # (stock_data['HLEV_percentage'] <= -1)
-    # |    
-    # ((stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])&
-    #  (stock_data['HLEV_percentage'] <= -1))
+    (stock_data['angle_ema200'] > -2*stock_data['rolling_std']) 
 
 
 )
@@ -215,13 +176,6 @@ cross_dates_buy = stock_data.index[cross_buy]
 cross_sell = (
 
 
-    # (stock_data['ema200'] > stock_data['HLEV_Origin']) &
-    # (stock_data['ema90'] > stock_data['HLEV_Origin']) &
-    # (stock_data['ema30'] > stock_data['ema90']) &
-    # (closePrice_EOD.shift(1) > stock_data['ema30'].shift(1)) &
-    # (closePrice_EOD < stock_data['ema30'])
-
-    # |
 
     (stock_data['angle_ema200'].shift(1) > 10*stock_data['rolling_std'].shift(1)) &
     (stock_data['angle_ema200'] < 10*stock_data['rolling_std']) &
@@ -230,21 +184,6 @@ cross_sell = (
     (stock_data['ATR_pct'] >= 0.03)
 
 
-    # ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
-    # (stock_data['ema30'] < stock_data['ema90']) &
-    # (stock_data['ema90'] > stock_data['HLEV_Origin']))
-    
-    # ((stock_data['ema30'].shift(1) > stock_data['ema90'].shift(1)) &
-    # (stock_data['ema30'] < stock_data['ema90']) &
-    # (stock_data['HLEV_percentage'] > 0.5))
-    # |
-    # ((stock_data['HLEV_percentage'] >= .9)&
-    #  (stock_data['angle_ema200'].shift(1) > 8*stock_data['rolling_std'].shift(1)) &
-    #  (stock_data['angle_ema200'] < 8*stock_data['rolling_std']))
-    # |
-    # ((stock_data['HLEV_percentage'] >= .9)&
-    #  (stock_data['angle_ema200'].shift(1) > 9*stock_data['rolling_std'].shift(1)) &
-    #  (stock_data['angle_ema200'] < 9*stock_data['rolling_std']))
 )
 cross_dates_sell = stock_data.index[cross_sell]
 
