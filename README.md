@@ -12,6 +12,7 @@ The project focuses on:
 This tool is intended for **analysis and experimentation**, not live trading or execution.
 
 ![LLLongTerm Example Output](images/ALK.JPG)
+![LLLongTerm Example Output](images/ALK_Stats.JPG)
 
 ---
 
@@ -70,6 +71,29 @@ The script produces:
   - Price with EMA overlays and HLEV origin
   - EMA angle with σ-bands and signal markers
   - ATR percentage over time
+
+### Console / Printable Output
+
+In addition to graphical plots, the script produces **human-readable console output** summarizing each simulated trade event.
+
+For each completed trade, the output includes:
+- Trade number
+- Buy and sell dates
+- Entry and exit prices
+- Calculated position size
+- Profit or loss for the trade
+- Running account balance
+
+At the end of execution, a final summary is printed showing:
+- Starting account balance
+- Total profit or loss
+- Ending account balance
+
+This textual output is designed to be:
+- Easy to review without visual plots
+- Suitable for logging or redirection to a file
+- Helpful for validating signal behavior during research and tuning
+
 
 These visualizations are intended to support **research and interpretation**, not automated decision-making.
 
