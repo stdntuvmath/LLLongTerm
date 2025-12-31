@@ -104,6 +104,8 @@ These visualizations are intended to support **research and interpretation**, no
 
 ## How to Run
 
+You will have to place code for your strategy to get this to work. The strategy presented in the example pictures has been removed because it is proprietary.
+
 ```bash
 pip install yfinance pandas numpy matplotlib python-dateutil
 python LLLongTerm.py

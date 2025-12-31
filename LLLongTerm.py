@@ -166,8 +166,7 @@ z = stock_data['z']
 cross_buy = ( 
 
 
-    (stock_data['angle_ema200'].shift(1) < -2*stock_data['rolling_std'].shift(1)) &
-    (stock_data['angle_ema200'] > -2*stock_data['rolling_std']) 
+    #  place logic strategy for buyihg here
 
 
 )
@@ -177,11 +176,7 @@ cross_sell = (
 
 
 
-    (stock_data['angle_ema200'].shift(1) > 10*stock_data['rolling_std'].shift(1)) &
-    (stock_data['angle_ema200'] < 10*stock_data['rolling_std']) &
-    (stock_data['10sigma_avg'] < 10*stock_data['rolling_std'])&
-    (stock_data['HLEV_percentage'] >= 0.7) &
-    (stock_data['ATR_pct'] >= 0.03)
+    #  place logic strategy for selling here
 
 
 )
@@ -365,17 +360,6 @@ for i in range(1, sigma_plot_max + 1):
 # Zero-line origin
 ax2.axhline(0, color='blue', linewidth=1.2, alpha=0.9, label='origin')
 
-# # Threshold lines
-# ax2.plot(
-#     stock_data['rolling_std'] * buy_threshold1,
-#     linestyle='--', linewidth=1, alpha=0.9,
-#     label=f'{buy_threshold1}σ (threshold)'
-# )
-# ax2.plot(
-#     stock_data['rolling_std'] * buy_threshold2,
-#     linestyle='--', linewidth=1, alpha=0.9,
-#     label=f'{buy_threshold2}σ (threshold)'
-# )
 
 
 # === Plot signals for buy_threshold1
