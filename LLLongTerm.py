@@ -158,15 +158,19 @@ stock_data['ATR_pct'] = stock_data['ATR_20'] / close
 
 
 # =======================================================
-# === FIXED CROSSING DETECTION (BUYS) =======
+# === FIXED CROSSING DETECTION (BUYS/SELLS) =======
 # =======================================================
+
+
+# Users must insert their own boolean logic below.
+# These defaults intentionally produce no signals.
 
 z = stock_data['z']
 
 cross_buy = ( 
 
-
-    #  place logic strategy for buyihg here
+    pd.Series(False, index=stock_data.index)
+    #  delete the above line and place logic strategy for buyihg here
 
 
 )
@@ -175,8 +179,8 @@ cross_dates_buy = stock_data.index[cross_buy]
 cross_sell = (
 
 
-
-    #  place logic strategy for selling here
+    pd.Series(False, index=stock_data.index)
+    #  delete the above line and place logic strategy for selling here
 
 
 )
